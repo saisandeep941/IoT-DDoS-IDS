@@ -1,0 +1,67 @@
+
+# Large datasets and generated data
+dataset/
+ml/processed_without_udplag.csv
+ml/processed_traffic.csv
+ml/*.csv
+
+# Python virtual environments and cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+
+# Large and generated datasets
+dataset/
+ml/*.csv
+
+# Model backup copies
+backups/
+
+# Temporary output
+running.txt
+
+# Frontend generated files
+frontend/node_modules/
+frontend/dist/
+
+# Python generated files
+backend/__pycache__/
+ml/__pycache__/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.log
+*.tmp
+
+# Backup and temporary model artifacts
+backend/*_backup.joblib
+backend/sample_model.joblib

@@ -68,7 +68,17 @@ y_true = np.array(
 )
 
 attack_class_index = list(pipeline.classes_).index(1)
+import time
+
+start_time = time.perf_counter()
 attack_probabilities = pipeline.predict_proba(X_eval)[:, attack_class_index]
+inference_time = time.perf_counter() - start_time
+
+print("\n--- Inference Efficiency ---")
+print(f"Samples evaluated: {len(X_eval)}")
+print(f"Total inference time: {inference_time:.6f} seconds")
+print(f"Average time per sample: {inference_time / len(X_eval) * 1000:.6f} ms")
+print(f"Throughput: {len(X_eval) / inference_time:.2f} samples/second")
 
 print("\n--- Threshold Comparison ---")
 

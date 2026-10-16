@@ -91,44 +91,37 @@ const runCsvStream = async (file) => {
 const stats = [
   {
     title: "Total Traffic",
-    value: (
-      trafficAnalysis?.total_traffic ??
-      dashboardData?.total_traffic ??
-      "Loading..."
-    ).toLocaleString?.() ??
-      trafficAnalysis?.total_traffic ??
-      dashboardData?.total_traffic ??
-      "Loading...",
+    value: trafficAnalysis?.total_traffic?.toLocaleString() ?? "Upload dataset",
     icon: Network,
   },
   {
     title: "Attacks Detected",
-    value: (
-      trafficAnalysis?.attacks_detected ??
-      dashboardData?.attacks_detected ??
-      "Loading..."
-    ).toLocaleString?.() ??
-      trafficAnalysis?.attacks_detected ??
-      dashboardData?.attacks_detected ??
-      "Loading...",
+    
+value: trafficAnalysis?.attacks_detected?.toLocaleString() ?? "Upload dataset",
+
     icon: ShieldAlert,
   },
   {
-    title: "Threats Blocked",
-    value: dashboardData?.threats_blocked ?? 0,
-    icon: ShieldCheck,
-  },
-  {
-    title: "Detection Rate",
-    value: trafficAnalysis
-      ? `${trafficAnalysis.total_traffic > 0
-          ? ((trafficAnalysis.attacks_detected / trafficAnalysis.total_traffic) * 100).toFixed(1)
-          : 0}%`
-      : dashboardData
-        ? `${dashboardData.detection_rate}%`
-        : "Loading...",
-    icon: Activity,
-  },
+  title: "Blocking Status",
+  value: "Not Implemented",
+  icon: ShieldCheck,
+},
+  
+
+{
+  title: "Attack Traffic",
+  value: trafficAnalysis
+    ? `${trafficAnalysis.total_traffic > 0
+        ? (
+            (trafficAnalysis.attacks_detected /
+              trafficAnalysis.total_traffic) * 100
+          ).toFixed(1)
+        : "0.0"}%`
+    : "Upload dataset",
+  icon: Activity,
+},
+
+
 ];
 
 const fileInputRef = useRef(null);
@@ -239,6 +232,7 @@ setDashboardData((prev) => ({
 }
 
 };
+
 const [backendAlerts, setBackendAlerts] = useState([]);
 
 useEffect(() => {
@@ -488,13 +482,25 @@ const runStream = async () => {
                 <p>Intelligent intrusion detection for IoT networks.</p>
                 <p>Use the sidebar to explore traffic, threats and AI insights.</p>
               </article>
-              <article className="panel">
-                <ShieldCheck size={32} className="green-text" />
-                <h3>Detection Status</h3>
-                <p>Dashboard interface ready.</p>
-                <p>ML model integration: Connected</p>
-                <p>Dataset integration: Pending</p>
-              </article>
+              
+<article className="panel">
+  <ShieldCheck size={32} className="green-text" />
+  <h3>Detection Status</h3>
+  <p>Dashboard interface ready.</p>
+  <p>
+    ML model integration:{" "}
+    {modelStatus?.model_trained === true
+      ? "Connected"
+      : modelStatus === null
+      ? "Checking..."
+      : "Unavailable"}
+  </p>
+  <p>
+    Dataset integration:{" "}
+    {uploadResult ? "Dataset uploaded" : "No dataset uploaded"}
+  </p>
+</article>
+
             </section>
             
 
@@ -830,9 +836,13 @@ const runStream = async () => {
     Latest prediction: {streamResult?.prediction ?? "No prediction yet"}
   </p>
   <p>
-    Latest risk score:{" "}
-    {streamResult ? `${streamResult.risk_score}%` : "—"}
-  </p>
+  Latest risk score:{" "}
+  {streamResult?.risk_score != null
+  ? `${streamResult.risk_score}%`
+  : streamResult?.latest_risk_score != null
+    ? `${streamResult.latest_risk_score}%`
+    : "—"}
+</p>
 </div>
 
 

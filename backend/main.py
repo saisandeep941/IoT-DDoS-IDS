@@ -609,25 +609,25 @@ async def predict_csv(file: UploadFile = File(...)):
     import pandas as pd
     import numpy as np
     from pathlib import Path
+    from collections import deque
+    from sklearn.metrics import confusion_matrix
 
-    from sklearn.metrics import (
-        accuracy_score,
-        precision_score,
-        recall_score,
-        f1_score,
-        confusion_matrix,
-    )
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Please upload a CSV file.")
 
     base_dir = Path(__file__).resolve().parent
     model = joblib.load(base_dir / "real_model_v2.joblib")
-    feature_names = joblib.load(base_dir /  "real_model_features_v2.joblib")
+    feature_names = joblib.load(base_dir / "real_model_features_v2.joblib")
 
     total_rows = 0
     predicted_attacks = 0
     predicted_benign = 0
     actual_counts = {0: 0, 1: 0}
-    predicted_counts = {0: 0, 1: 0}
+    latest_risk_score = None
     cm = np.zeros((2, 2), dtype=np.int64)
+
+    # Keep only a small sample of this upload's predictions.
+    recent_samples = deque(maxlen=20)
 
     for chunk in pd.read_csv(file.file, chunksize=10000, low_memory=False):
         chunk.columns = chunk.columns.str.strip()
@@ -644,15 +644,43 @@ async def predict_csv(file: UploadFile = File(...)):
 
         if X.isna().all(axis=1).any():
             raise HTTPException(
-            status_code=400,
-            detail="CSV contains rows with no valid numeric model features.",
-        )
-
+                status_code=400,
+                detail="CSV contains rows with no valid numeric model features.",
+            )
 
         predictions = model.predict(X).astype(int)
+        
+        probabilities = model.predict_proba(X)
+        classes = list(model.classes_)
+
+        if 1 not in classes:
+            raise HTTPException(
+                status_code=500,
+                detail="The model does not contain the expected attack class.",
+            )
+
+        attack_index = classes.index(1)
+        risks = probabilities[:, attack_index] * 100
+
         total_rows += len(chunk)
         predicted_attacks += int((predictions == 1).sum())
         predicted_benign += int((predictions == 0).sum())
+
+        # Retain at most the latest 20 predictions from this upload.
+        for prediction, risk in zip(predictions, risks):
+            severity = (
+                "Critical" if risk >= 75
+                else "High" if risk >= 50
+                else "Medium" if risk >= 25
+                else "Low"
+            )
+
+            recent_samples.append({
+                "prediction": "Attack" if prediction == 1 else "Benign",
+                "risk_score": round(float(risk), 2),
+                "severity": severity,
+                "source": f"CSV upload: {file.filename}",
+            })
 
         if "Label" in chunk.columns:
             labels = chunk["Label"].astype("string").str.strip().str.upper()
@@ -664,20 +692,30 @@ async def predict_csv(file: UploadFile = File(...)):
                 )
 
             actual = labels.ne("BENIGN").astype(int).to_numpy()
-
             cm += confusion_matrix(actual, predictions, labels=[0, 1])
             actual_counts[0] += int((actual == 0).sum())
             actual_counts[1] += int((actual == 1).sum())
-            predicted_counts[0] += int((predictions == 0).sum())
-            predicted_counts[1] += int((predictions == 1).sum())
+
+    if total_rows == 0:
+        raise HTTPException(status_code=400, detail="The CSV file is empty.")
+
+    # Save the sampled predictions to the existing backend history.
+    with detection_history_lock:
+        for sample in recent_samples:
+            detection_records.appendleft({
+                "id": len(detection_records) + 1,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **sample,
+            })
 
     result = {
         "filename": file.filename,
         "total_rows": total_rows,
         "predicted_attacks": predicted_attacks,
         "predicted_benign": predicted_benign,
-        "model": "Random Forest",
-        "note": "Predictions are model estimates.",
+        "model": "Random Forest V2",
+        "history_records_added": len(recent_samples),
+        "note": "Predictions are model estimates. History contains a sample of the latest CSV predictions.",
     }
 
     if actual_counts[0] + actual_counts[1] > 0:
@@ -689,9 +727,7 @@ async def predict_csv(file: UploadFile = File(...)):
             "f1_score": round(
                 2 * tp / (2 * tp + fp + fn), 6
             ) if 2 * tp + fp + fn else 0,
-            
             "confusion_matrix": cm.tolist(),
-            
         })
 
     return result
@@ -831,6 +867,30 @@ async def stream_csv(file: UploadFile = File(...)):
                 )
 
             predictions = model.predict(X).astype(int)
+            probabilities = model.predict_proba(X)[:, 1]
+            latest_risk_score = round(float(probabilities[-1]) * 100, 2)
+
+            for prediction, probability in zip(predictions, probabilities):
+                risk_score = float(probability) * 100
+
+                if prediction == 1:
+                    severity = (
+                        "Critical" if risk_score >= 80
+                        else "High" if risk_score >= 60
+                        else "Medium" if risk_score >= 30
+                        else "Low"
+                    )
+                    prediction_label = "Attack"
+                else:
+                    severity = "Low"
+                    prediction_label = "Benign"
+
+                record_detection(
+                    prediction=prediction_label,
+                    risk_score=risk_score,
+                    severity=severity,
+                    source="CSV batch stream",
+                )
 
             batch_attacks = int((predictions == 1).sum())
             batch_benign = int((predictions == 0).sum())
@@ -864,4 +924,5 @@ async def stream_csv(file: UploadFile = File(...)):
         "batch_size": 1000,
         "batches": batches,
         "note": "CSV records were processed in batches; this is not live packet capture.",
+        "latest_risk_score": latest_risk_score,
     }
